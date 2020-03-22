@@ -133,7 +133,7 @@ class TranslateAction(ConsoleAction):
             makedirs(dest, exist_ok=True)
             with open(join(dest, 'AUTO_TRANSLATED'), "w") as f:
                 f.write('Files in this folder is auto translated by mycroft-msk. ')
-                f.write('Files in this folder is auto translated by mycroft-msk. ')
+                f.write('Please do a manuel inspection of the translation in every file ')
             
         for folder in lang_folders:
             for root, dirs, files in walk(folder, topdown=True):
@@ -177,7 +177,7 @@ class TranslateAction(ConsoleAction):
 
     def translate_line(self, line, part, result):
         ''' translate real words in line - not regex tags and other stuff '''
-        regex_chars=['(', ')', '|', '?', '<', '>', '.', '*', ',', '\\', '.', ':', '[', ']','{','}']
+        regex_chars=['(', ')', '|', '?', '<', '>', '.', '*', ',', '!', '$', '\\', '.', ':', '[', ']','{','}']
         if line == '':
             translated_part = translate(part, self.lang, 'en-us')
             return result + translated_part
@@ -189,17 +189,21 @@ class TranslateAction(ConsoleAction):
                 translated_part = ' '
             result = result + translated_part
             
-            if line[0] == '<': 
+            if len(line) == 1:
+                return result + line[0] 
+            elif line[1] in regex_chars:
+                    return self.translate_line(line[1:], '', result + line[0])  
+            elif line[0] == '<': 
                 tag = line.split('>')[0]
                 return self.translate_line(line[len(tag)+1:], '', result + line.split('>')[0] + '>') 
-            if line[0] == '{': 
+            elif line[0] == '{': 
                 tag = line.split('}')[0]
                 return self.translate_line(line[len(tag)+1:], '', result + line.split('}')[0] + '}') 
-            if line[0] == '[': 
+            elif line[0] == '[': 
                 tag = line.split(']')[0]
                 return self.translate_line(line[len(tag)+1:], '', result + line.split(']')[0] + ']') 
             elif line[0] == '?':       
-                return self.translate_line(line[1:], '', result + line[:1]) 
+                return self.translate_line(line[1:], '', result + line[0]) 
             elif line[0] == '\\':       
                 return self.translate_line(line[2:], '', result + line[:2]) 
             else:
@@ -212,9 +216,6 @@ class TranslateAction(ConsoleAction):
         dest = root.replace('en-us', self.lang)
         print("Translating " + file)
         translated = []
-        translated.append('# This file is auto translated by mycroft-msk. \n')
-        translated.append('# Please do a manuel inspection of the translation \n')
-        translated.append(' \n')
         with open(join(root, file), "r") as f:
             lines = f.readlines()
             for line in lines:
