@@ -147,10 +147,7 @@ class TranslateAction(ConsoleAction):
                     print(dest)
 
                 for file in files:
-                    if (file[-3:] == ".rx") or (file[-6] == ".regex"):
-                        self.handle_regex(root, file)
-                    else:
-                        self.handle_file(root, file)
+                    self.handle_translate(root, file)
                     
     def validate_language(self, lang=None):
         ''' ensure language is supported by google translate '''
@@ -178,11 +175,12 @@ class TranslateAction(ConsoleAction):
         translated = translate(text, lang)
         return translated
 
-    def translate_regex(self, line, part, result):
-        ''' translate real words in regex - not tags and other stuff '''
-        regex_chars=['(', ')', '|', '?', '<', '>', '.', '*', ',', '\\', '.', ':', '[', ']']
+    def translate_line(self, line, part, result):
+        ''' translate real words in line - not regex tags and other stuff '''
+        regex_chars=['(', ')', '|', '?', '<', '>', '.', '*', ',', '\\', '.', ':', '[', ']','{','}']
         if line == '':
-            return result + part
+            translated_part = translate(part, self.lang, 'en-us')
+            return result + translated_part
         if line[0] in regex_chars:
             translated_part = translate(part, self.lang, 'en-us')
             if (part.endswith(' ')) and (len(part) > 1) :
@@ -193,63 +191,24 @@ class TranslateAction(ConsoleAction):
             
             if line[0] == '<': 
                 tag = line.split('>')[0]
-                return self.translate_regex(line[len(tag)+1:], '', result + line.split('>')[0] + '>') 
+                return self.translate_line(line[len(tag)+1:], '', result + line.split('>')[0] + '>') 
+            if line[0] == '{': 
+                tag = line.split('}')[0]
+                return self.translate_line(line[len(tag)+1:], '', result + line.split('}')[0] + '}') 
             if line[0] == '[': 
                 tag = line.split(']')[0]
-                return self.translate_regex(line[len(tag)+1:], '', result + line.split(']')[0] + ']') 
+                return self.translate_line(line[len(tag)+1:], '', result + line.split(']')[0] + ']') 
             elif line[0] == '?':       
-                return self.translate_regex(line[1:], '', result + line[:1]) 
+                return self.translate_line(line[1:], '', result + line[:1]) 
             elif line[0] == '\\':       
-                return self.translate_regex(line[2:], '', result + line[:2]) 
+                return self.translate_line(line[2:], '', result + line[:2]) 
             else:
-                return self.translate_regex(line[1:], '', result + line[0])    
+                return self.translate_line(line[1:], '', result + line[0])    
         else:
-            return self.translate_regex(line[1:], part + line[0], result)
+            return self.translate_line(line[1:], part + line[0], result)
 
-    def handle_file(self, root, file):
-        dest = root.replace('en-us', self.lang)
-        print("Translating " + file)
-        translated = []
-        translated.append('# This file is auto translated by mycroft-msk. \n')
-        translated.append('# Please do a manuel inspection of the translation \n')
-        translated.append(' \n')
-        
-        with open(join(root, file), "r") as f:
-            lines = f.readlines()
-            original_tags = []
-            translated_tags = []
-            for line in lines:
-                translated.append('# ' + line.strip('\n') + '\n')
-                original_tags += re.findall('\{\{[^}]*\}\}', line)
-                translated_line = self.translate(line)+" \n"
-                translated.append(translated_line)
-                translated_tags += re.findall('\{\{[^}]*\}\}', translated_line)
-                for idx, tag in enumerate(original_tags):
-                    for idr, line in enumerate(translated):
-                        try:
-                            # restore var names
-                            fixed = line.replace(translated_tags[idx],
-                                                    original_tags[idx].replace(" ", ""))
-                            words = fixed.split(" ")
-                            for i, w in enumerate(words):
-                                # translation randomly removes starting {{
-                                if "}}" in w and "{{" not in w:
-                                    words[i] = "{{"+w
-                                if "{{" in w and "}}" not in w:
-                                    words[i] += "}}"
-                                if "}" in w and "{" not in w:
-                                    words[i] = "{"+w
-                                if "{" in w and "}" not in w:
-                                    words[i] += "}"
-                            fixed = " ".join(words)
-                            translated[idr] = fixed
-                        except Exception:
-                            print(file + " needs manual fixing")
 
-        with open(join(dest, file), "w") as f:
-            f.writelines(translated)
-
-    def handle_regex(self, root, file):
+    def handle_translate(self, root, file):
         dest = root.replace('en-us', self.lang)
         print("Translating " + file)
         translated = []
@@ -259,8 +218,11 @@ class TranslateAction(ConsoleAction):
         with open(join(root, file), "r") as f:
             lines = f.readlines()
             for line in lines:
-                translated.append('# ' + line.strip('\n') + '\n')
-                translated.append(self.translate_regex(line, '', '') + " \n")
+                if line[0] == '#':
+                    translated.append(line.strip('\n') + " \n")
+                else: 
+                    translated.append('# ' + line.strip('\n') + '\n')
+                    translated.append(self.translate_line(line, '', '') + " \n")
         with open(join(dest, file), "w") as f:
             f.writelines(translated)
 
